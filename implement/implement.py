@@ -66,7 +66,7 @@ class Viterbi:
         
         self.tagged_sents = tagged_sents_with_unk
     
-    # calculate start tag prob
+    # calculate start tag prob (stored as log)
     def start_prob_calc(self):
         init_tags = {}
 
@@ -77,9 +77,9 @@ class Viterbi:
         total = sum(init_tags.values())
 
         for k, v in init_tags.items():
-            self.start_prob[k] = v / total
+            self.start_prob[k] = np.log(v / total)
     
-    # calculate transition prob
+    # calculate transition prob (stored as log)
     def trans_prob_calc(self):
         trans_cnt = defaultdict(lambda: defaultdict(int))
         
@@ -100,10 +100,10 @@ class Viterbi:
             total_count = self.tags_cnt[prev_tag]
 
             for next_tag, count in next_tags_dict.items():
-                # laplace smoothing
-                self.trans_prob[prev_tag][next_tag] = (count + 1) / (total_count + len(self.tags_cnt))
+                # laplace smoothing, stored as log
+                self.trans_prob[prev_tag][next_tag] = np.log((count + 1) / (total_count + len(self.tags_cnt)))
 
-    # calculate emission prob
+    # calculate emission prob (stored as log)
     def emis_prob_calc(self):
         emit_cnt = defaultdict(lambda: defaultdict(int))
 
@@ -119,8 +119,7 @@ class Viterbi:
             total_tag_count = self.tag_total_cnt[tag]
 
             for word, count in words_dict.items():
-                # laplace smoothing
-                self.emit_prob[tag][word] = (count + 1) / (total_tag_count + vocab_size)
+                    self.emit_prob[tag][word] = np.log((count + 1) / (total_tag_count + vocab_size))
 
     # find tags of the sentence
     def find_tags(self, sentence: list[str]):
@@ -130,11 +129,17 @@ class Viterbi:
             if t == 0:
                 # getting start tag
                 for i, curr_tag in enumerate(all_tags):
-                    score = self.start_prob.get(curr_tag, 0) * self.emit_prob.get(curr_tag, {}).get(sentence[0], 0)
+                    # probabilities are already in log space
+                    start_log = self.start_prob.get(curr_tag, None)
+                    emit_log = self.emit_prob.get(curr_tag, {}).get(sentence[0], None)
 
-                    if score > 0:
-                        self.V[0][curr_tag] = score
-                        self.path[curr_tag] = [curr_tag]
+                    if start_log is None or emit_log is None:
+                        continue
+
+                    score = start_log + emit_log
+
+                    self.V[0][curr_tag] = score
+                    self.path[curr_tag] = [curr_tag]
 
                         node_name = f"{t}_{curr_tag}"
                         self.G.add_node(node_name)
@@ -162,11 +167,14 @@ class Viterbi:
 
                         prev_score = self.V[t-1][prev_tag]
 
-                        trans_score = self.trans_prob.get(prev_tag, {}).get(curr_tag, 0)
+                        # probabilities are already in log space
+                        trans_log = self.trans_prob.get(prev_tag, {}).get(curr_tag, None)
+                        emit_log = self.emit_prob.get(curr_tag, {}).get(word, None)
 
-                        emit_score = self.emit_prob.get(curr_tag, {}).get(word, 0)
+                        if trans_log is None or emit_log is None:
+                            continue
 
-                        current_score = prev_score * trans_score * emit_score
+                        current_score = prev_score + trans_log + emit_log
 
                         if current_score > best_prob:
                             best_prob = current_score
