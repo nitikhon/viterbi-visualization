@@ -139,6 +139,7 @@ class Viterbi:
                 # getting start tag
                 best_score_t0 = NEG_INF
                 best_node_t0 = None
+                surviving_nodes_t0 = []
 
                 for i, curr_tag in enumerate(all_tags):
                     # probabilities are already in log space
@@ -156,20 +157,26 @@ class Viterbi:
                     node_name = f"{t}_{curr_tag}"
                     self.G.add_node(node_name)
                     self.G.add_edge("Start", node_name)
-
-                    # fix tag pos
-                    self.pos[node_name] = (t, i - len(all_tags)/2)
+                    surviving_nodes_t0.append(node_name)
 
                     if score > best_score_t0:
                         best_score_t0 = score
                         best_node_t0 = node_name
 
-                    # detailed: highlight each node as it's computed
-                    if detailed:
+                # position surviving nodes evenly (same as t>0)
+                y_spacing = 2.0
+                for idx, node in enumerate(surviving_nodes_t0):
+                    y = (idx - len(surviving_nodes_t0) / 2) * y_spacing
+                    self.pos[node] = (t, y)
+
+                # detailed: highlight each node as it's computed
+                if detailed:
+                    for node in surviving_nodes_t0:
+                        tag_name = node.split('_', 1)[1]
                         self.draw_graph(
-                            f"Step {t}: Computing tag '{curr_tag}' for '{sentence[t]}'",
+                            f"Step {t}: Computing tag '{tag_name}' for '{sentence[t]}'",
                             all_tags, len(sentence),
-                            highlight_node=node_name,
+                            highlight_node=node,
                             best_nodes=best_nodes
                         )
                         plt.pause(0.5)
@@ -314,7 +321,8 @@ class Viterbi:
 
         plt.title(title)
         plt.xlim(-2, sentence_len)
-        plt.ylim(-len(all_tags)/2 - 1, len(all_tags)/2 + 1)
+        y_limit = len(all_tags) + 2
+        plt.ylim(-y_limit, y_limit)
 
         self.fig.canvas.draw_idle()
         self.fig.canvas.flush_events()
